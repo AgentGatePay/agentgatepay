@@ -1,0 +1,2612 @@
+{
+  "info": {
+    "name": "AgentPay MVP - Complete Test Suite (Agent Economy Flow)",
+    "description": "AgentPay MVP - Complete API test suite\n\n\ud83d\udd27 QUICK SETUP (Required Variables):\n1. api_url \u2192 https://api.agentgatepay.com\n2. mcp_url \u2192 https://mcp.agentgatepay.com\n3. agent_id \u2192 your-agent-name (any identifier)\n4. agent_api_key \u2192 Get from /v1/users/signup (user_type: 'agent')\n5. merchant_api_key \u2192 Get from /v1/users/signup (user_type: 'merchant')\n6. merchant_wallet \u2192 Your Ethereum wallet address (0x...)\n7. test_tx_hash \u2192 Real blockchain transaction hash from your wallet\n\n\ud83d\udcda Test Flow:\n1. Health Check \u2192 Verify gateway is online\n2. User Signup \u2192 Get API key (REQUIRED for most tests)\n3. Issue AP2 Mandate \u2192 Get mandate_token (REQUIRED for payments)\n4. Verify Mandate \u2192 Check token is valid\n5. Submit Payment \u2192 Send payment with tx_hash from blockchain\n6. Payment Verification \u2192 Verify payment status (merchant endpoints)\n\n\u2728 Features: Multi-chain payments (Ethereum/Base/Polygon/Arbitrum), AP2 mandates, MCP integration, webhooks, analytics\n\n\ud83d\udcd6 For production integration examples:\n- Python examples: github.com/AgentGatePay/agentgatepay-examples\n- JavaScript SDK: github.com/AgentGatePay/agentgatepay-sdks",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "agentpay-mvp"
+  },
+  "variable": [
+    {
+      "key": "api_url",
+      "value": "https://api.agentgatepay.com",
+      "type": "string"
+    },
+    {
+      "key": "admin_key",
+      "value": "",
+      "type": "string",
+      "description": "Admin key for public analytics (optional - ask system admin)"
+    },
+    {
+      "key": "mcp_url",
+      "value": "https://mcp.agentgatepay.com",
+      "type": "string",
+      "description": "MCP subdomain (JSON-RPC 2.0 endpoint)"
+    },
+    {
+      "key": "agent_id",
+      "value": "postman-test-agent",
+      "type": "string"
+    },
+    {
+      "key": "mandate_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "x402_nonce",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "x402_pay_to",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "x402_amount",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "agent_api_key",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "merchant_api_key",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "merchant_wallet",
+      "value": "0xYourMerchantWalletAddress",
+      "type": "string"
+    },
+    {
+      "key": "client_wallet",
+      "value": "0xYourClientWalletAddress",
+      "type": "string",
+      "description": "Your wallet address (for reference only - Postman cannot sign transactions)"
+    },
+    {
+      "key": "webhook_url",
+      "value": "https://your-merchant-backend.com/webhooks/agentpay",
+      "type": "string"
+    },
+    {
+      "key": "webhook_secret",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "webhook_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "test_tx_hash",
+      "value": "0x1234567890abcdef",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & System Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});",
+                  "",
+                  "pm.test('All components are OK', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.components) {",
+                  "        Object.keys(jsonData.components).forEach(key => {",
+                  "            pm.expect(['ok', 'healthy']).to.include(jsonData.components[key]);",
+                  "        });",
+                  "    } else {",
+                  "        pm.expect(jsonData.status).to.eql('healthy');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Gateway info present', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const hasCommission = jsonData.commission_rate !== undefined || ",
+                  "                          (jsonData.gateway_info && jsonData.gateway_info.commission_rate !== undefined);",
+                  "    pm.expect(hasCommission || jsonData.status === 'healthy').to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/health",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Check system health and component status"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "x402 Payment Protocol",
+      "item": [
+        {
+          "name": "1. Get Payment Requirements (402) - WITH MANDATE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 402 Payment Required', function () {",
+                  "    pm.response.to.have.status(402);",
+                  "});",
+                  "",
+                  "pm.test('Response contains payment requirements', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('x402_version');",
+                  "    pm.expect(jsonData).to.have.property('accepts');",
+                  "    pm.expect(jsonData.accepts).to.be.an('array');",
+                  "    pm.expect(jsonData.accepts.length).to.be.greaterThan(0);",
+                  "});",
+                  "",
+                  "pm.test('Mandate requirement indicated', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.mandate_required).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Payment details are valid', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const payment = jsonData.accepts[0];",
+                  "    ",
+                  "    pm.expect(payment).to.have.property('scheme');",
+                  "    pm.expect(payment).to.have.property('network');",
+                  "    pm.expect(payment).to.have.property('max_amount_required');",
+                  "    pm.expect(payment).to.have.property('pay_to');",
+                  "    pm.expect(payment).to.have.property('nonce');",
+                  "    ",
+                  "    // Save for next request",
+                  "    pm.collectionVariables.set('x402_nonce', payment.nonce);",
+                  "    pm.collectionVariables.set('x402_pay_to', payment.pay_to);",
+                  "    pm.collectionVariables.set('x402_amount', payment.max_amount_required);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text",
+                "description": "AGENT ECONOMY: Mandate token REQUIRED for resource access"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{agent_api_key}}",
+                "type": "text",
+                "description": "Optional - Use if you have API key",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ]
+            },
+            "description": "AGENT ECONOMY STEP 3: Request resource WITH mandate \u2192 Gateway returns 402 Payment Required with mandate requirements. NOTE: Run 'Issue Mandate' first to get mandate_token!"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Access with Payment + Mandate (Demo)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Create payment payload",
+                  "const paymentPayload = {",
+                  "    from: '0x0000000000000000000000000000000000000000',",
+                  "    to: pm.collectionVariables.get('x402_pay_to') || '0x0000000000000000000000000000000000000000',",
+                  "    amount: pm.collectionVariables.get('x402_amount') || '1000',",
+                  "    nonce: pm.collectionVariables.get('x402_nonce') || 'test_nonce',",
+                  "    signature: '0x' + '0'.repeat(130)",
+                  "};",
+                  "",
+                  "// Base64 encode",
+                  "const paymentHeader = btoa(JSON.stringify(paymentPayload));",
+                  "pm.collectionVariables.set('x_payment_header', paymentHeader);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// This will fail without real payment, but demonstrates the flow",
+                  "pm.test('Request sent with payment and mandate headers', function () {",
+                  "    pm.expect(pm.request.headers.get('x-payment')).to.not.be.undefined;",
+                  "    pm.expect(pm.request.headers.get('x-mandate')).to.not.be.undefined;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text",
+                "description": "AGENT ECONOMY: Mandate token for authorization"
+              },
+              {
+                "key": "x-payment",
+                "value": "{{x_payment_header}}",
+                "type": "text",
+                "description": "x402 payment proof"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{agent_api_key}}",
+                "type": "text",
+                "description": "Optional - Use if you have API key",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ]
+            },
+            "description": "AGENT ECONOMY STEP 4: Submit x402 payment WITH mandate \u2192 Gateway validates mandate, settles payment, deducts from budget, returns resource. NOTE: Requires real USDC for success!"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "x402 with Hybrid Auth (API Key + Signature)",
+      "item": [
+        {
+          "name": "1. Get Payment Requirements",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "demo-api-key-12345",
+                "type": "text",
+                "description": "API key identifies the account/sender"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text",
+                "description": "REQUIRED: Mandate token for authorization"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ]
+            },
+            "description": "Hybrid Auth Flow - Step 1: Client authenticates with API Key + Mandate, gateway looks up wallet address"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Pay with Signature (Hybrid Auth)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// In production, client would:",
+                  "// 1. Get wallet address from their API key",
+                  "// 2. Sign payment with private key",
+                  "// 3. Gateway verifies signature matches API key's wallet",
+                  "",
+                  "const paymentPayload = {",
+                  "    from: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',  // Wallet associated with API key",
+                  "    to: pm.collectionVariables.get('x402_pay_to') || '0x0000000000000000000000000000000000000000',",
+                  "    amount: pm.collectionVariables.get('x402_amount') || '1000',",
+                  "    nonce: pm.collectionVariables.get('x402_nonce') || 'test_nonce',",
+                  "    signature: '0x' + '1234'.repeat(32) // Demo signature - in production, sign with private key",
+                  "};",
+                  "",
+                  "const paymentHeader = btoa(JSON.stringify(paymentPayload));",
+                  "pm.collectionVariables.set('x_payment_header', paymentHeader);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "demo-api-key-12345",
+                "type": "text",
+                "description": "API key for account identification"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text",
+                "description": "REQUIRED: Mandate token for authorization"
+              },
+              {
+                "key": "x-payment",
+                "value": "{{x_payment_header}}",
+                "type": "text",
+                "description": "Payment with signature proving wallet ownership"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ]
+            },
+            "description": "Hybrid Auth Flow - Step 2: Client signs payment with private key, gateway validates API key wallet matches signature + mandate authorization"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "AP2 Mandate Protocol",
+      "item": [
+        {
+          "name": "1. Issue Mandate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Mandate issued successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('mandate_id');",
+                  "    pm.expect(jsonData).to.have.property('mandate_token');",
+                  "    pm.expect(jsonData).to.have.property('issued_at');",
+                  "    pm.expect(jsonData).to.have.property('expires_at');",
+                  "    pm.expect(jsonData).to.have.property('nonce');",
+                  "    ",
+                  "    // Save token for verification",
+                  "    pm.collectionVariables.set('mandate_token', jsonData.mandate_token);",
+                  "});",
+                  "",
+                  "pm.test('Mandate token has JWT-like structure', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const token = jsonData.mandate_token;",
+                  "    const parts = token.split('.');",
+                  "    pm.expect(parts.length).to.eql(3); // header.payload.signature",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{agent_api_key}}",
+                "type": "text",
+                "description": "Optional - If set, mandate will be for authenticated user",
+                "disabled": false
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"subject\": \"test-agent-{{$timestamp}}\",\n    \"budget_usd\": 100.0,\n    \"scope\": \"resource.read,payment.execute\",\n    \"ttl_minutes\": 60,\n    \"mandate_type\": \"cart\"\n}"
+            },
+            "url": {
+              "raw": "{{api_url}}/mandates/issue",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "mandates",
+                "issue"
+              ]
+            },
+            "description": "Issue a new AP2 mandate (verifiable digital credential)"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Verify Mandate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Mandate is valid', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('valid');",
+                  "    pm.expect(jsonData.valid).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Payload contains mandate details', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('payload');",
+                  "    const payload = jsonData.payload;",
+                  "    ",
+                  "    pm.expect(payload).to.have.property('iss');",
+                  "    pm.expect(payload).to.have.property('sub');",
+                  "    pm.expect(payload).to.have.property('budget_usd');",
+                  "    pm.expect(payload).to.have.property('scope');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"mandate_token\": \"{{mandate_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{api_url}}/mandates/verify",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "mandates",
+                "verify"
+              ]
+            },
+            "description": "Verify an AP2 mandate token (requires token from previous request)"
+          },
+          "response": []
+        },
+        {
+          "name": "3. Issue Mandate - Invalid Budget",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message mentions validation', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('error');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"subject\": \"test-agent-validation\",\n    \"budget_usd\": 99999999,\n    \"scope\": \"content.read\",\n    \"ttl_minutes\": 60\n}"
+            },
+            "url": {
+              "raw": "{{api_url}}/mandates/issue",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "mandates",
+                "issue"
+              ]
+            },
+            "description": "Test validation - budget exceeds maximum allowed"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "MCP (Model Context Protocol)",
+      "item": [
+        {
+          "name": "1. List MCP Tools",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON-RPC 2.0 format', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('jsonrpc');",
+                  "    pm.expect(jsonData.jsonrpc).to.eql('2.0');",
+                  "});",
+                  "",
+                  "pm.test('Tools array is returned', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('result');",
+                  "    pm.expect(jsonData.result).to.have.property('tools');",
+                  "    pm.expect(jsonData.result.tools).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('All expected tools are present', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const tools = jsonData.result.tools;",
+                  "    pm.expect(tools.length).to.be.at.least(10);",
+                  "    const toolNames = tools.map(t => t.name);",
+                  "    pm.expect(toolNames).to.include('agentpay_issue_mandate');",
+                  "    pm.expect(toolNames).to.include('agentpay_create_payment');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-agent-id",
+                "value": "mcp-{{agent_id}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"tools/list\",\n  \"params\": {},\n  \"id\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{mcp_url}}/",
+              "host": [
+                "{{mcp_url}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "List all available MCP tools"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Call MCP Tool - Issue Mandate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON-RPC 2.0 format', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('jsonrpc');",
+                  "    pm.expect(jsonData.jsonrpc).to.eql('2.0');",
+                  "});",
+                  "",
+                  "pm.test('Result contains mandate data', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('result');",
+                  "    const result = JSON.parse(jsonData.result.content[0].text);",
+                  "    pm.expect(result).to.have.property('mandate_token');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-agent-id",
+                "value": "mcp-{{agent_id}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"agentpay_issue_mandate\",\n    \"arguments\": {\n      \"subject\": \"mcp-agent-{{$timestamp}}\",\n      \"budget_usd\": 25.0,\n      \"scope\": \"api.read\",\n      \"ttl_minutes\": 30\n    }\n  },\n  \"id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{mcp_url}}/",
+              "host": [
+                "{{mcp_url}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "Call MCP tool to issue a mandate"
+          },
+          "response": []
+        },
+        {
+          "name": "3. Call MCP Tool - Create Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON-RPC 2.0 format', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('jsonrpc');",
+                  "    pm.expect(jsonData.jsonrpc).to.eql('2.0');",
+                  "});",
+                  "",
+                  "pm.test('Payment requirements returned', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('result');",
+                  "    const result = JSON.parse(jsonData.result.content[0].text);",
+                  "    pm.expect(result).to.have.property('accepts');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-agent-id",
+                "value": "mcp-{{agent_id}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"agentpay_create_payment\",\n    \"arguments\": {\n      \"amount_usd\": \"0.001\",\n      \"resource_path\": \"/mcp/test/resource\"\n    }\n  },\n  \"id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{mcp_url}}/",
+              "host": [
+                "{{mcp_url}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "Call MCP tool to create payment charge"
+          },
+          "response": []
+        },
+        {
+          "name": "4. MCP Unified Endpoint (JSON-RPC 2.0) - OpenAI Agent Builder",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON-RPC 2.0 format', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('jsonrpc');",
+                  "    pm.expect(jsonData.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "});",
+                  "",
+                  "pm.test('Result contains tools array', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('result');",
+                  "    pm.expect(jsonData.result).to.have.property('tools');",
+                  "    pm.expect(jsonData.result.tools).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Tools array has expected MCP tools', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const toolNames = jsonData.result.tools.map(t => t.name);",
+                  "    pm.expect(toolNames).to.include('agentpay_issue_mandate');",
+                  "    pm.expect(toolNames).to.include('agentpay_verify_mandate');",
+                  "    pm.expect(toolNames).to.include('agentpay_create_payment');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-agent-id",
+                "value": "mcp-{{agent_id}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"jsonrpc\": \"2.0\",\n    \"id\": 1,\n    \"method\": \"tools/list\",\n    \"params\": {}\n}"
+            },
+            "url": {
+              "raw": "{{mcp_url}}/",
+              "host": [
+                "{{mcp_url}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "MCP Unified Endpoint (JSON-RPC 2.0) - Nov 8, 2025\n\nThis is the SINGLE unified endpoint for OpenAI Agent Builder compatibility. Unlike the separate /mcp/tools/list and /mcp/tools/call endpoints, this endpoint handles ALL MCP operations via JSON-RPC 2.0 method routing.\n\n**Why This Exists:**\n- OpenAI Agent Builder requires a single unified endpoint\n- Uses JSON-RPC 2.0 protocol standard\n- Routes to same backend as REST API endpoints\n\n**Available Methods:**\n- tools/list - List all available MCP tools\n- tools/call - Execute an MCP tool\n\n**Usage in OpenAI Agent Builder (URL Mode):**\n1. Go to OpenAI Agent Builder\n2. Add custom action with URL: https://api.agentgatepay.com/mcp\n3. Use JSON-RPC 2.0 format for all requests\n4. Agent can now access all 15 AgentPay tools!\n\n**MCP Server Bridge (Command Mode):**\nFor Claude Desktop or OpenAI Agent Builder command mode, use the Node.js MCP server bridge:\n- Location: mcp-server/agentpay-mcp-server.js\n- Protocol: stdio (stdin/stdout)\n- Zero dependencies (pure Node.js)\n- Test script: ./tests/test_mcp_server_bridge.sh\n\n**All 3 MCP Interfaces:**\n1. REST API: POST /mcp/tools/list, POST /mcp/tools/call\n2. Unified JSON-RPC 2.0: POST /mcp (this endpoint)\n3. MCP Server Bridge: stdio protocol via Node.js\n\nSee docs/testing/MCP_DOCUMENTATION.md for complete guide."
+          },
+          "response": []
+        },
+        {
+          "name": "5. MCP Unified Endpoint - Call Tool (JSON-RPC 2.0)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON-RPC 2.0 format', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('jsonrpc');",
+                  "    pm.expect(jsonData.jsonrpc).to.eql('2.0');",
+                  "});",
+                  "",
+                  "pm.test('Result contains system health data', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('result');",
+                  "    const result = JSON.parse(jsonData.result.content[0].text);",
+                  "    pm.expect(result).to.have.property('status');",
+                  "    pm.expect(result.status).to.eql('healthy');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-agent-id",
+                "value": "mcp-{{agent_id}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"jsonrpc\": \"2.0\",\n    \"id\": 2,\n    \"method\": \"tools/call\",\n    \"params\": {\n        \"name\": \"agentpay_get_system_health\",\n        \"arguments\": {}\n    }\n}"
+            },
+            "url": {
+              "raw": "{{mcp_url}}/",
+              "host": [
+                "{{mcp_url}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "MCP Unified Endpoint - Call Tool Example\n\nDemonstrates calling an MCP tool via the unified JSON-RPC 2.0 endpoint. This example calls agentpay_get_system_health (a public tool that requires no authentication).\n\n**To test other tools:**\nChange the 'name' and 'arguments' in the request body:\n\n```json\n{\n    \"jsonrpc\": \"2.0\",\n    \"id\": 2,\n    \"method\": \"tools/call\",\n    \"params\": {\n        \"name\": \"agentpay_issue_mandate\",\n        \"arguments\": {\n            \"subject\": \"test-agent\",\n            \"budget_usd\": 50.0,\n            \"scope\": \"api.read\",\n            \"ttl_minutes\": 30\n        }\n    }\n}\n```\n\nAll 15 MCP tools are available via this single endpoint!"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "1. List Recent Audit Logs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Logs array is returned', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('logs');",
+                  "    pm.expect(jsonData).to.have.property('count');",
+                  "});",
+                  "",
+                  "pm.test('Log entries have required fields', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.logs.length > 0) {",
+                  "        const log = jsonData.logs[0];",
+                  "        pm.expect(log).to.have.property('id');",
+                  "        pm.expect(log).to.have.property('timestamp');",
+                  "        pm.expect(log).to.have.property('event_type');",
+                  "        pm.expect(log).to.have.property('client_id');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "admin-{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{agent_api_key}}",
+                "type": "text",
+                "description": "Required for audit access (Dec 3, 2025 security update)"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/audit/logs?limit=20",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "audit",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get recent audit logs with pagination"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Filter Logs by Event Type",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('All logs match event type filter', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    jsonData.logs.forEach(log => {",
+                  "        pm.expect(log.event_type).to.eql('mandate_issued');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "admin-{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{agent_api_key}}",
+                "type": "text",
+                "description": "Required for audit access (Dec 3, 2025 security update)"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/audit/logs?event_type=mandate_issued&limit=10",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "audit",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "event_type",
+                  "value": "mandate_issued"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Filter audit logs by event type"
+          },
+          "response": []
+        },
+        {
+          "name": "3. Get Audit Statistics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Statistics include event counts', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('total_events');",
+                  "    pm.expect(jsonData).to.have.property('event_type_counts');",
+                  "    pm.expect(jsonData).to.have.property('client_counts');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "admin-{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{agent_api_key}}",
+                "type": "text",
+                "description": "Required for audit access (Dec 3, 2025 security update)"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/audit/stats?hours=24",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "audit",
+                "stats"
+              ],
+              "query": [
+                {
+                  "key": "hours",
+                  "value": "24"
+                }
+              ]
+            },
+            "description": "Get audit statistics summary for last 24 hours"
+          },
+          "response": []
+        },
+        {
+          "name": "4. Filter Logs by Client ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('All logs match client_id filter', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const expectedClientId = pm.collectionVariables.get('agent_id');",
+                  "    jsonData.logs.forEach(log => {",
+                  "        pm.expect(log.client_id).to.eql(expectedClientId);",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "admin-{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{agent_api_key}}",
+                "type": "text",
+                "description": "Required for audit access (Dec 3, 2025 security update)"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/audit/logs?client_id={{agent_id}}&limit=10",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "audit",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "client_id",
+                  "value": "{{agent_id}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Filter audit logs by client/agent ID"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Multi-Chain Support Tests",
+      "item": [
+        {
+          "name": "Test Ethereum Mainnet",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 402 Payment Required', function () {",
+                  "    pm.response.to.have.status(402);",
+                  "});",
+                  "",
+                  "pm.test('Network is Ethereum', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepts[0].network).to.eql('ethereum');",
+                  "});",
+                  "",
+                  "pm.test('USDC contract is Ethereum mainnet', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepts[0].asset).to.eql('0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource?chain=ethereum&price_usd=0.01",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ],
+              "query": [
+                {
+                  "key": "chain",
+                  "value": "ethereum"
+                },
+                {
+                  "key": "price_usd",
+                  "value": "0.01"
+                }
+              ]
+            },
+            "description": "STEP 2 (COMPLETE \u2705 - Nov 2, 2025):\n\nTest Ethereum Mainnet (Chain ID: 1)\n- Highest liquidity\n- Most widely adopted\n- USDC Contract: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Base L2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 402 Payment Required', function () {",
+                  "    pm.response.to.have.status(402);",
+                  "});",
+                  "",
+                  "pm.test('Network is Base', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepts[0].network).to.eql('base');",
+                  "});",
+                  "",
+                  "pm.test('USDC contract is Base', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepts[0].asset).to.eql('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource?chain=base&price_usd=0.01",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ],
+              "query": [
+                {
+                  "key": "chain",
+                  "value": "base"
+                },
+                {
+                  "key": "price_usd",
+                  "value": "0.01"
+                }
+              ]
+            },
+            "description": "Test Base L2 (Chain ID: 8453)\n- Low fees, fast finality\n- Coinbase L2\n- USDC Contract: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Polygon",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 402 Payment Required', function () {",
+                  "    pm.response.to.have.status(402);",
+                  "});",
+                  "",
+                  "pm.test('Network is Polygon', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepts[0].network).to.eql('polygon');",
+                  "});",
+                  "",
+                  "pm.test('USDC contract is Polygon', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepts[0].asset).to.eql('0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource?chain=polygon&price_usd=0.01",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ],
+              "query": [
+                {
+                  "key": "chain",
+                  "value": "polygon"
+                },
+                {
+                  "key": "price_usd",
+                  "value": "0.01"
+                }
+              ]
+            },
+            "description": "Test Polygon (Chain ID: 137)\n- High throughput\n- Widely adopted, low cost\n- USDC Contract: 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Arbitrum One",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 402 Payment Required', function () {",
+                  "    pm.response.to.have.status(402);",
+                  "});",
+                  "",
+                  "pm.test('Network is Arbitrum', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepts[0].network).to.eql('arbitrum');",
+                  "});",
+                  "",
+                  "pm.test('USDC contract is Arbitrum', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepts[0].asset).to.eql('0xaf88d065e77c8cC2239327C5EDb3A432268e5831');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource?chain=arbitrum&price_usd=0.01",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ],
+              "query": [
+                {
+                  "key": "chain",
+                  "value": "arbitrum"
+                },
+                {
+                  "key": "price_usd",
+                  "value": "0.01"
+                }
+              ]
+            },
+            "description": "Test Arbitrum One (Chain ID: 42161)\n- High throughput Ethereum L2\n- USDC Contract: 0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Multi-Token Support Tests",
+      "item": [
+        {
+          "name": "Test USDC (6 decimals) on Base",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 402 Payment Required', function () {",
+                  "    pm.response.to.have.status(402);",
+                  "});",
+                  "",
+                  "pm.test('Token is USDC with 6 decimals', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepts[0].asset_symbol).to.eql('USDC');",
+                  "    pm.expect(jsonData.accepts[0].asset_decimals).to.eql(6);",
+                  "});",
+                  "",
+                  "pm.test('Decimal math is correct (6 decimals)', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const amount = parseInt(jsonData.accepts[0].max_amount_required);",
+                  "    // 0.001 USD = 1,000 units (6 decimals: 0.001 * 10^6)",
+                  "    pm.expect(amount).to.eql(1000);",
+                  "});",
+                  "    // $0.001 with 6 decimals = 1000 atomic units",
+                  "    pm.expect(jsonData.accepts[0].max_amount_required).to.eql(1000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource?chain=base&token=USDC&price_usd=0.001",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ],
+              "query": [
+                {
+                  "key": "chain",
+                  "value": "base"
+                },
+                {
+                  "key": "token",
+                  "value": "USDC"
+                },
+                {
+                  "key": "price_usd",
+                  "value": "0.001"
+                }
+              ]
+            },
+            "description": "STEP 3 (COMPLETE \u2705 - Nov 3, 2025):\n\nTest USDC on Base\n- 6 decimals\n- Available on all 4 chains\n- Most widely adopted stablecoin"
+          },
+          "response": []
+        },
+        {
+          "name": "Test USDT (6 decimals) on Ethereum",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 402 Payment Required', function () {",
+                  "    pm.response.to.have.status(402);",
+                  "});",
+                  "",
+                  "pm.test('Token is USDT with 6 decimals', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepts[0].asset_symbol).to.eql('USDT');",
+                  "    pm.expect(jsonData.accepts[0].asset_decimals).to.eql(6);",
+                  "});",
+                  "",
+                  "pm.test('Decimal math is correct (6 decimals)', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const amount = parseInt(jsonData.accepts[0].max_amount_required);",
+                  "    // 0.001 USD = 1,000 units (6 decimals: 0.001 * 10^6)",
+                  "    pm.expect(amount).to.eql(1000);",
+                  "});",
+                  "    // $0.001 with 6 decimals = 1000 atomic units",
+                  "    pm.expect(jsonData.accepts[0].max_amount_required).to.eql(1000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource?chain=ethereum&token=USDT&price_usd=0.001",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ],
+              "query": [
+                {
+                  "key": "chain",
+                  "value": "ethereum"
+                },
+                {
+                  "key": "token",
+                  "value": "USDT"
+                },
+                {
+                  "key": "price_usd",
+                  "value": "0.001"
+                }
+              ]
+            },
+            "description": "Test USDT on Ethereum\n- 6 decimals\n- Available on Ethereum, Polygon, Arbitrum\n- Second most popular stablecoin"
+          },
+          "response": []
+        },
+        {
+          "name": "Test DAI (18 decimals) on Polygon",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 402 Payment Required', function () {",
+                  "    pm.response.to.have.status(402);",
+                  "});",
+                  "",
+                  "pm.test('Token is DAI with 18 decimals', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepts[0].asset_symbol).to.eql('DAI');",
+                  "    pm.expect(jsonData.accepts[0].asset_decimals).to.eql(18);",
+                  "});",
+                  "",
+                  "pm.test('Decimal math is correct (18 decimals)', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const amount = jsonData.accepts[0].max_amount_required;",
+                  "    // 0.001 USD = 1,000,000,000,000,000 units (18 decimals: 0.001 * 10^18)",
+                  "    pm.expect(amount).to.eql('1000000000000000');",
+                  "});",
+                  "    // $0.001 with 18 decimals = 1000000000000000 atomic units",
+                  "    pm.expect(jsonData.accepts[0].max_amount_required).to.eql(1000000000000000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource?chain=polygon&token=DAI&price_usd=0.001",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ],
+              "query": [
+                {
+                  "key": "chain",
+                  "value": "polygon"
+                },
+                {
+                  "key": "token",
+                  "value": "DAI"
+                },
+                {
+                  "key": "price_usd",
+                  "value": "0.001"
+                }
+              ]
+            },
+            "description": "Test DAI on Polygon\n- 18 decimals (different from USDC/USDT)\n- Available on all 4 chains\n- Decentralized stablecoin"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Unsupported Token (should fail)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 4xx error', function () {",
+                  "    pm.expect(pm.response.code).to.be.at.least(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message indicates unsupported token', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('error');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-mandate",
+                "value": "{{mandate_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/x402/resource?chain=base&token=WETH&price_usd=0.001",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "x402",
+                "resource"
+              ],
+              "query": [
+                {
+                  "key": "chain",
+                  "value": "base"
+                },
+                {
+                  "key": "token",
+                  "value": "WETH"
+                },
+                {
+                  "key": "price_usd",
+                  "value": "0.001"
+                }
+              ]
+            },
+            "description": "Test error handling for unsupported token\n- WETH is not a supported stablecoin\n- Gateway should reject with error\n- Validates token whitelist enforcement"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Merchant Payment Verification",
+      "item": [
+        {
+          "name": "1. Verify Payment (Public - No Auth)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Payment verified successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('verified');",
+                  "    pm.expect(jsonData).to.have.property('payment');",
+                  "});",
+                  "",
+                  "pm.test('Payment details present', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const payment = jsonData.payment;",
+                  "    pm.expect(payment).to.have.property('tx_hash');",
+                  "    pm.expect(payment).to.have.property('from_address');",
+                  "    pm.expect(payment).to.have.property('to_address');",
+                  "    pm.expect(payment).to.have.property('amount_usd');",
+                  "    pm.expect(payment).to.have.property('chain');",
+                  "    pm.expect(payment).to.have.property('token');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{merchant_api_key}}",
+                "type": "text",
+                "description": "Required for merchant endpoints (Dec 3, 2025 security update)"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/v1/payments/verify/{{test_tx_hash}}",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "payments",
+                "verify",
+                "{{test_tx_hash}}"
+              ]
+            },
+            "description": "STEP 6 (COMPLETE \u2705 - Nov 5, 2025):\n\nPublic Payment Verification (No Authentication Required)\n- Anyone can verify payment authenticity\n- Returns full payment details from blockchain\n- Includes explorer URL for trustless verification\n\n**Use Case:** Merchant verifies client payment before delivering resource\n\n**Test with real tx_hash from previous payment!**"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Quick Payment Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Status fields present', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('tx_hash');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('verified');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{merchant_api_key}}",
+                "type": "text",
+                "description": "Required for merchant endpoints (Dec 3, 2025 security update)"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/v1/payments/status/{{test_tx_hash}}",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "payments",
+                "status",
+                "{{test_tx_hash}}"
+              ]
+            },
+            "description": "Quick Payment Status Check\n- Lightweight response (status only)\n- Faster than full verification\n- No authentication required\n\n**Use Case:** Quick polling for payment confirmation"
+          },
+          "response": []
+        },
+        {
+          "name": "3. List Payment History (Dual-Query)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has payments array', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('payments');",
+                  "    pm.expect(jsonData).to.have.property('total');",
+                  "    pm.expect(jsonData).to.have.property('revenue');",
+                  "    pm.expect(jsonData).to.have.property('spending');",
+                  "});",
+                  "",
+                  "pm.test('Payments have direction field', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.payments.length > 0) {",
+                  "        jsonData.payments.forEach(payment => {",
+                  "            pm.expect(payment).to.have.property('direction');",
+                  "            pm.expect(['sent', 'received']).to.include(payment.direction);",
+                  "        });",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{merchant_api_key}}",
+                "type": "text",
+                "description": "Merchant API key from signup"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/v1/payments/list?wallet={{merchant_wallet}}&limit=20",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "payments",
+                "list"
+              ],
+              "query": [
+                {
+                  "key": "wallet",
+                  "value": "{{merchant_wallet}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "List Payment History (Dual-Query - Updated Nov 19, 2025)\n- Returns BOTH sent and received payments\n- Each payment has 'direction' field: 'sent' or 'received'\n- Supports unregistered wallets (N8N compatibility)\n- Requires API key for authentication\n\n**Response Fields:**\n- revenue: Total received payments\n- spending: Total sent payments\n- is_registered_wallet: Whether wallet is in user account\n\n**Use Case:** Merchant views all incoming payments"
+          },
+          "response": []
+        },
+        {
+          "name": "4. Configure Webhook",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Webhook configured successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('webhook_id');",
+                  "    pm.expect(jsonData).to.have.property('webhook_secret');",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "});",
+                  "",
+                  "pm.test('Save webhook credentials', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('webhook_id', jsonData.webhook_id);",
+                  "    pm.collectionVariables.set('webhook_secret', jsonData.webhook_secret);",
+                  "    console.log('\u26a0\ufe0f SAVE WEBHOOK SECRET - You will not see it again!');",
+                  "    console.log('webhook_secret:', jsonData.webhook_secret);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{merchant_api_key}}",
+                "type": "text",
+                "description": "Merchant API key from signup"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"merchant_wallet\": \"{{merchant_wallet}}\",\n    \"webhook_url\": \"{{webhook_url}}\",\n    \"events\": [\"payment.completed\"]\n}"
+            },
+            "url": {
+              "raw": "{{api_url}}/v1/webhooks/configure",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "webhooks",
+                "configure"
+              ]
+            },
+            "description": "Configure Payment Webhook (Requires API Key)\n- Receive real-time payment notifications\n- HMAC SHA256 signature verification\n- Events: payment.completed, payment.failed\n- Returns webhook_secret (save it - shown once!)\n\n**Use Case:** Merchant receives instant payment confirmations\n\n**Security:** Verify webhook signature with webhook_secret"
+          },
+          "response": []
+        },
+        {
+          "name": "5. List Webhooks",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Webhooks array returned', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('webhooks');",
+                  "    pm.expect(jsonData).to.have.property('count');",
+                  "});",
+                  "",
+                  "pm.test('Webhook details present', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.webhooks.length > 0) {",
+                  "        const webhook = jsonData.webhooks[0];",
+                  "        pm.expect(webhook).to.have.property('webhook_id');",
+                  "        pm.expect(webhook).to.have.property('webhook_url');",
+                  "        pm.expect(webhook).to.have.property('events');",
+                  "        pm.expect(webhook).to.have.property('status');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{merchant_api_key}}",
+                "type": "text",
+                "description": "Merchant API key from signup"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/v1/webhooks/list",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "webhooks",
+                "list"
+              ]
+            },
+            "description": "List Configured Webhooks (Requires API Key)\n- View all webhook configurations\n- Check delivery statistics\n- Monitor webhook health\n\n**Response includes:**\n- webhook_id\n- webhook_url\n- events\n- delivery_count\n- failure_count\n- last_triggered timestamp"
+          },
+          "response": []
+        },
+        {
+          "name": "6. Test Webhook Delivery",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Test delivery successful', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('success');",
+                  "    pm.expect(jsonData).to.have.property('test_delivery');",
+                  "});",
+                  "",
+                  "pm.test('Delivery details present', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const delivery = jsonData.test_delivery;",
+                  "    pm.expect(delivery).to.have.property('status_code');",
+                  "    pm.expect(delivery).to.have.property('response_time_ms');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{merchant_api_key}}",
+                "type": "text",
+                "description": "Merchant API key from signup"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"webhook_id\": \"{{webhook_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{api_url}}/v1/webhooks/test",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "webhooks",
+                "test"
+              ]
+            },
+            "description": "Test Webhook Delivery (Requires API Key)\n- Send test payload to webhook URL\n- Verify webhook endpoint is reachable\n- Check response time and status code\n\n**Use Case:** Debug webhook integration before going live\n\n**Returns:**\n- HTTP status code\n- Response time\n- Headers sent (including signature)"
+          },
+          "response": []
+        },
+        {
+          "name": "7. Get Revenue Analytics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Revenue data present', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('total_usd');",
+                  "    pm.expect(jsonData).to.have.property('count');",
+                  "    pm.expect(jsonData).to.have.property('average_usd');",
+                  "});",
+                  "",
+                  "pm.test('Revenue by chain and token', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('by_chain');",
+                  "    pm.expect(jsonData).to.have.property('by_token');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{merchant_api_key}}",
+                "type": "text",
+                "description": "Merchant API key from signup"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/v1/merchant/revenue?wallet={{merchant_wallet}}&period=week",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "merchant",
+                "revenue"
+              ],
+              "query": [
+                {
+                  "key": "wallet",
+                  "value": "{{merchant_wallet}}"
+                },
+                {
+                  "key": "period",
+                  "value": "week",
+                  "description": "Options: today, week, month, all_time, custom"
+                }
+              ]
+            },
+            "description": "Merchant Revenue Analytics (Requires API Key)\n- Total revenue breakdown\n- Revenue by chain (Ethereum, Base, Polygon, Arbitrum)\n- Revenue by token (USDC, USDT, DAI)\n- Average transaction size\n\n**Period Options:**\n- today - Today's revenue\n- week - Last 7 days\n- month - Last 30 days\n- all_time - Total since account creation\n- custom - Requires start_date and end_date params\n\n**Use Case:** Merchant tracks earnings and payment trends"
+          },
+          "response": []
+        },
+        {
+          "name": "8. Delete Webhook",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Webhook deleted successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('success');",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{merchant_api_key}}",
+                "type": "text",
+                "description": "Merchant API key from signup"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/v1/webhooks/{{webhook_id}}",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "webhooks",
+                "{{webhook_id}}"
+              ]
+            },
+            "description": "Delete Webhook (Requires API Key)\n- Remove webhook configuration\n- Stop receiving payment notifications\n- Cleanup webhook lifecycle\n\n**Use Case:** Merchant changes webhook URL or stops accepting payments"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Analytics & Dashboard",
+      "item": [
+        {
+          "name": "1. Get Public Analytics (No Auth)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has required analytics fields', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('total_volume_usd');",
+                  "    pm.expect(jsonData).to.have.property('total_transactions');",
+                  "    pm.expect(jsonData).to.have.property('active_users_approx');",
+                  "    pm.expect(jsonData).to.have.property('success_rate');",
+                  "    pm.expect(jsonData).to.have.property('cache_ttl_seconds');",
+                  "});",
+                  "",
+                  "pm.test('Cache TTL is 15 minutes (900 seconds)', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.cache_ttl_seconds).to.eql(900);",
+                  "});",
+                  "",
+                  "pm.test('User count is privacy-preserving (rounded)', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const activeUsers = jsonData.active_users_approx;",
+                  "    // Should be rounded to nearest 10",
+                  "    pm.expect(activeUsers % 10).to.eql(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-admin-key",
+                "value": "{{admin_key}}",
+                "type": "text",
+                "description": "Admin key for public analytics"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/v1/analytics/public",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "analytics",
+                "public"
+              ]
+            },
+            "description": "STEP 7 (COMPLETE \u2705 - Nov 6, 2025):\n\nPublic Analytics (No Authentication Required)\n- Total platform volume (USD)\n- Total transactions\n- Active users (approx, privacy-preserving)\n- Success rate\n- 15-minute Lambda cache (900 seconds)\n\nFeatures:\n- No API key required\n- User counts rounded to nearest 10 (privacy)\n- Chain/token distribution\n- Cached for performance ($0.50/month vs $12/month for CloudWatch)"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Get User Analytics - Agent (With API Key)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Set your agent API key here or use collection variable",
+                  "if (!pm.collectionVariables.get('agent_api_key')) {",
+                  "    pm.collectionVariables.set('agent_api_key', 'pk_live_YOUR_AGENT_API_KEY');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('User type is agent', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.user_type).to.eql('agent');",
+                  "});",
+                  "",
+                  "pm.test('Agent analytics has required fields', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('total_spent_usd');",
+                  "    pm.expect(jsonData).to.have.property('transaction_count');",
+                  "    pm.expect(jsonData).to.have.property('mandates_issued');",
+                  "    pm.expect(jsonData).to.have.property('reputation_score');",
+                  "    pm.expect(jsonData).to.have.property('by_chain');",
+                  "    pm.expect(jsonData).to.have.property('by_token');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{agent_api_key}}",
+                "type": "text",
+                "description": "Agent API key from signup"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/v1/analytics/me",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "analytics",
+                "me"
+              ]
+            },
+            "description": "Agent Analytics (Authenticated with API Key)\n- Total spending (USD)\n- Transaction count\n- Mandates issued\n- Reputation score\n- Spending by chain (Ethereum, Base, Polygon, Arbitrum)\n- Spending by token (USDC, USDT, DAI)\n\nRequires API key from /v1/users/signup"
+          },
+          "response": []
+        },
+        {
+          "name": "3. Get User Analytics - Merchant (With API Key)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Set your merchant API key here or use collection variable",
+                  "if (!pm.collectionVariables.get('merchant_api_key')) {",
+                  "    pm.collectionVariables.set('merchant_api_key', 'pk_live_YOUR_MERCHANT_API_KEY');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('User type is merchant', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.user_type).to.eql('merchant');",
+                  "});",
+                  "",
+                  "pm.test('Merchant analytics has required fields', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('total_revenue_usd');",
+                  "    pm.expect(jsonData).to.have.property('transaction_count');",
+                  "    pm.expect(jsonData).to.have.property('commission_paid_usd');",
+                  "    pm.expect(jsonData).to.have.property('reputation_score');",
+                  "    pm.expect(jsonData).to.have.property('by_chain');",
+                  "    pm.expect(jsonData).to.have.property('by_token');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{merchant_api_key}}",
+                "type": "text",
+                "description": "Merchant API key from signup"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/v1/analytics/me",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "analytics",
+                "me"
+              ]
+            },
+            "description": "Merchant Analytics (Authenticated with API Key)\n- Total revenue (USD)\n- Transaction count\n- Commission paid to gateway\n- Reputation score\n- Revenue by chain (Ethereum, Base, Polygon, Arbitrum)\n- Revenue by token (USDC, USDT, DAI)\n\nRequires API key from /v1/users/signup"
+          },
+          "response": []
+        },
+        {
+          "name": "4. Get Analytics Dashboard (HTML)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has HTML content-type', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html');",
+                  "});",
+                  "",
+                  "pm.test('HTML contains dashboard title', function () {",
+                  "    pm.expect(pm.response.text()).to.include('AgentPay Analytics');",
+                  "});",
+                  "",
+                  "pm.test('HTML contains Chart.js', function () {",
+                  "    pm.expect(pm.response.text()).to.include('chart.js');",
+                  "});",
+                  "",
+                  "pm.test('HTML fetches from analytics API', function () {",
+                  "    pm.expect(pm.response.text()).to.include('/v1/analytics/public');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-admin-key",
+                "value": "{{admin_key}}",
+                "type": "text",
+                "description": "Admin key (optional)"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/dashboard",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "dashboard"
+              ]
+            },
+            "description": "Analytics Dashboard (HTML Visualization)\n- Beautiful Chart.js pie charts\n- Real-time platform metrics\n- Chain distribution\n- Token distribution\n- No authentication required\n- Responsive design\n- Fetches from /v1/analytics/public\n\nOpen in browser to view charts!"
+          },
+          "response": []
+        },
+        {
+          "name": "5. Test Analytics Without API Key (Should Fail)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401 Unauthorized', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test('Error message indicates missing API key', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('error');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-agent-id",
+                "value": "{{agent_id}}",
+                "type": "text"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{agent_api_key}}",
+                "type": "text",
+                "description": "Required for user analytics"
+              }
+            ],
+            "url": {
+              "raw": "{{api_url}}/v1/analytics/me",
+              "host": [
+                "{{api_url}}"
+              ],
+              "path": [
+                "v1",
+                "analytics",
+                "me"
+              ]
+            },
+            "description": "Test authentication security\n- /v1/analytics/me requires API key\n- Should return 401 Unauthorized without key\n- Public analytics (/v1/analytics/public) does not require key"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global pre-request script",
+          "console.log('Request to:', pm.request.url);"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test script",
+          "pm.test('Response time is acceptable', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});",
+          "",
+          "pm.test('Response has JSON content-type', function () {",
+          "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+          "});"
+        ]
+      }
+    }
+  ]
+}
