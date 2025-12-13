@@ -10,6 +10,22 @@ AgentGatePay enables AI agents to autonomously send and receive payments using b
 
 ---
 
+## ⚠️ IMPORTANT DISCLAIMER
+
+**AgentGatePay is currently in BETA.** By using this service, you acknowledge and accept:
+
+- **Service Availability:** The service may be unavailable, suspended, or permanently shut down at any time without prior notice. No SLA or uptime guarantees.
+- **Data Loss Risk:** All data may be lost at any time without recovery. Users are solely responsible for maintaining independent backups of transaction records.
+- **No Liability:** AgentGatePay and its operators are NOT LIABLE for any direct, indirect, incidental, or consequential damages, including but not limited to: lost cryptocurrency, failed transactions, service interruptions, or loss of revenue.
+- **Financial Risk:** Blockchain transactions are irreversible. Use at your own risk. Users are solely responsible for securing their private keys, API keys, and compliance with applicable laws.
+- **No Warranty:** This service is provided "AS IS" without warranties of any kind.
+
+**📄 Read the full [DISCLAIMER.md](DISCLAIMER.md) before using AgentGatePay.**
+
+**BY USING THIS SERVICE, YOU AGREE TO THESE TERMS. IF YOU DO NOT AGREE, DO NOT USE AGENTGATEPAY.**
+
+---
+
 ## Quick Links
 
 - **[📊 Visual Introduction (PDF)](docs/overview/AgentGatePay-Overview-Presentation.pdf)** - 9-slide visual overview (start here!)
