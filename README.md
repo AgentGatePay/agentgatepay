@@ -174,15 +174,13 @@ We built the **first payment gateway specifically designed for AI agents**, addr
 
 ### 6. Two Novel Protocols
 
-We didn't just build a payment gateway - we created two new protocols for agent payments:
-
-**AP2 (Agent Payment Protocol v2):**
+**Google AP2 (Agent Payment Protocol v2):**
 - Cryptographic budget mandates
 - Scope-based authorization
 - Automatic spending tracking
 - Time-bound permissions
 
-**x402 (HTTP 402 Payment Required):**
+**x402 Coinbase (HTTP 402 Payment Required):**
 - Standardized payment-required responses
 - Multi-chain payment requests
 - On-chain verification
@@ -218,8 +216,7 @@ These protocols are **open** and can be implemented by anyone building agent inf
 - Active support and rapid iteration
 
 **4. Our Effort**
-We've spent months building:
-- Two novel protocols (AP2, x402)
+- Use of two novel protocols (Google AP2, Coinbase x402)
 - Multi-chain blockchain integration
 - Security infrastructure for agent protection
 - Complete API with 24+ endpoints
